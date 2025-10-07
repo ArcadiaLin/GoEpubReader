@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 )
 
 type Chapter struct {
@@ -15,7 +16,35 @@ type Chapter struct {
 	Images     []string
 }
 
-// TODO complement methods for Chapter type if needed
+// Text joins all extracted paragraphs into a single string separated by blank
+// lines. The returned value is suitable for plain-text readers.
+func (c *Chapter) Text() string {
+	if c == nil || len(c.Paragraphs) == 0 {
+		return ""
+	}
+	return strings.Join(c.Paragraphs, "\n\n")
+}
+
+// HasImages reports whether the chapter contains any referenced images.
+func (c *Chapter) HasImages() bool {
+	return c != nil && len(c.Images) > 0
+}
+
+// Clone returns a deep copy of the chapter. This is handy when callers want to
+// modify the returned value without affecting the book cache.
+func (c *Chapter) Clone() Chapter {
+	if c == nil {
+		return Chapter{}
+	}
+	clone := Chapter{
+		ID:    c.ID,
+		Path:  c.Path,
+		Title: c.Title,
+	}
+	clone.Paragraphs = append(clone.Paragraphs, c.Paragraphs...)
+	clone.Images = append(clone.Images, c.Images...)
+	return clone
+}
 
 func ParseChapter(id, href string, f *zip.File) (*Chapter, error) {
 	if f == nil {
@@ -78,6 +107,9 @@ func findFirstText(n *HtmlNode, name string) string {
 }
 
 func extractParagraphs(body *HtmlNode) []string {
+	if body == nil {
+		return nil
+	}
 	var res []string
 	for _, c := range body.Children {
 		if c.Type == ElementNode && (c.Name == "p" || c.Name == "div") {
@@ -93,6 +125,9 @@ func extractParagraphs(body *HtmlNode) []string {
 }
 
 func extractImages(body *HtmlNode, base string) []string {
+	if body == nil {
+		return nil
+	}
 	var res []string
 	if body.Type == ElementNode && body.Name == "img" {
 		if src, ok := body.Attrs["src"]; ok {

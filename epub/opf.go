@@ -1,6 +1,7 @@
 package epub
 
 import (
+	"bytes"
 	"fmt"
 	"path"
 	"sort"
@@ -42,7 +43,96 @@ type Opf struct {
 	Spine    *Spine
 }
 
-// TODO complement methods for Opf, Metadata, Manifest, Spine types if needed
+// ParseOpf parses the OPF document and eagerly populates its major sections.
+func ParseOpf(content []byte) (*Opf, error) {
+	var root XmlNode
+	if err := xmlNewDecoder(bytes.NewReader(content)).Decode(&root); err != nil {
+		return nil, fmt.Errorf("parse opf: %w", err)
+	}
+	opf := &Opf{XmlNode: &root}
+	if err := opf.ParseMetadata(); err != nil {
+		return nil, err
+	}
+	if err := opf.ParseManifest(); err != nil {
+		return nil, err
+	}
+	if err := opf.ParseSpine(); err != nil {
+		return nil, err
+	}
+	return opf, nil
+}
+
+// Get returns all normalized metadata values for the provided Dublin Core key.
+func (md *Metadata) Get(key string) []string {
+	if md == nil {
+		return nil
+	}
+	key = strings.ToLower(key)
+	if !in(dublinCoreElements, key) {
+		return nil
+	}
+	normalized := md.Normalize()
+	values := normalized[key]
+	// Return a copy to protect internal state.
+	return append([]string(nil), values...)
+}
+
+// First returns the first metadata value associated with the key.
+func (md *Metadata) First(key string) (string, bool) {
+	values := md.Get(key)
+	if len(values) == 0 {
+		return "", false
+	}
+	return values[0], true
+}
+
+// ItemByID returns the manifest entry that matches the given ID.
+func (mf *Manifest) ItemByID(id string) (EmptyXmlNode, bool) {
+	if mf == nil {
+		return EmptyXmlNode{}, false
+	}
+	for _, item := range mf.Items {
+		if strings.EqualFold(item.Attrs["id"], id) {
+			return item, true
+		}
+	}
+	return EmptyXmlNode{}, false
+}
+
+// MediaTypeByID returns the media-type attribute for the manifest entry.
+func (mf *Manifest) MediaTypeByID(id string) (string, bool) {
+	item, ok := mf.ItemByID(id)
+	if !ok {
+		return "", false
+	}
+	mediaType, ok := item.Attrs["media-type"]
+	return mediaType, ok
+}
+
+// Len returns the number of spine itemrefs.
+func (spine *Spine) Len() int {
+	if spine == nil {
+		return 0
+	}
+	return len(spine.Itemrefs)
+}
+
+// ChapterPaths returns the ordered list of chapter document hrefs resolved
+// against the OPF path.
+func (opf *Opf) ChapterPaths(opfPath string) []string {
+	if opf == nil {
+		return nil
+	}
+	ids := opf.Spine.ExtractChapterIDs()
+	lookup := opf.Manifest.HrefLookup(opfPath)
+	var paths []string
+	for _, id := range ids {
+		if href, ok := lookup[id]; ok {
+			paths = append(paths, href)
+		}
+	}
+	return paths
+}
 
 // GetAll 返回简化后的元数据视图 / GetAll flattens metadata into a simple key/value representation.
 func (md *Metadata) GetAll() map[string][]string {

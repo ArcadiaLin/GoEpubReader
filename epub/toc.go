@@ -14,7 +14,53 @@ type TOC struct {
 	Children []TOC
 }
 
-// TODO complement methods for TOC types if needed
+// Walk traverses the table-of-contents tree in depth-first order and invokes fn
+// for every entry. Returning a non-nil error from the callback aborts the walk
+// and propagates the error to the caller.
+func (t TOC) Walk(fn func(TOC) error) error {
+	if fn == nil {
+		return nil
+	}
+	if err := fn(t); err != nil {
+		return err
+	}
+	for _, child := range t.Children {
+		if err := child.Walk(fn); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// FindByHref returns the first TOC entry whose href matches the provided value.
+// The comparison is performed after cleaning the href to make it resilient to
+// small differences in path formatting.
+func (t TOC) FindByHref(href string) *TOC {
+	cleaned := path.Clean(href)
+	var found *TOC
+	_ = t.Walk(func(entry TOC) error {
+		if found != nil {
+			return nil
+		}
+		if entry.Href != "" && path.Clean(entry.Href) == cleaned {
+			copy := entry
+			found = &copy
+		}
+		return nil
+	})
+	return found
+}
+
+// Flatten flattens the table of contents into a slice preserving the natural
+// reading order.
+func (t TOC) Flatten() []TOC {
+	var entries []TOC
+	_ = t.Walk(func(entry TOC) error {
+		entries = append(entries, entry)
+		return nil
+	})
+	return entries
+}
 
 func ParseTOC(tocType, tocFile, opfDir string, files map[string]*zip.File) ([]TOC, error) {
 	f, ok := files[path.Join(opfDir, tocFile)]
@@ -31,7 +77,7 @@ func ParseTOC(tocType, tocFile, opfDir string, files map[string]*zip.File) ([]TO
 	case TOCTypeEPUB3:
 		return parseNavXML(content, opfDir)
 	case TOCTypeEPUB2:
-		return parseNCX(content)
+		return parseNCX(content, opfDir)
 	default:
 		return nil, fmt.Errorf("unknown toc type")
 	}
@@ -90,7 +136,7 @@ func parseNavXML(content []byte, basePath string) ([]TOC, error) {
 					entry.Title = strings.TrimSpace(child.NodeText())
 					for _, a := range child.Attrs {
 						if a.Name.Local == "href" {
-							entry.Href = path.Clean(a.Value)
+							entry.Href = resolveRelative(basePath, a.Value)
 							break
 						}
 					}
@@ -109,7 +155,7 @@ func parseNavXML(content []byte, basePath string) ([]TOC, error) {
 }
 
 // parseNCX 解析 EPUB2 toc.ncx
-func parseNCX(content []byte) ([]TOC, error) {
+func parseNCX(content []byte, basePath string) ([]TOC, error) {
 	root, err := ParseXML(bytes.NewReader(content))
 	if err != nil {
 		return nil, fmt.Errorf("parseNCX: invalid XML: %w", err)
@@ -136,7 +182,7 @@ func parseNCX(content []byte) ([]TOC, error) {
 				case "content":
 					for _, a := range c.Attrs {
 						if a.Name.Local == "src" {
-							href = strings.TrimSpace(a.Value)
+							href = resolveRelative(basePath, strings.TrimSpace(a.Value))
 						}
 					}
 				}
