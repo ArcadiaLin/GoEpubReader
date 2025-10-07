@@ -18,7 +18,48 @@ type EmptyXmlNode struct {
 	Attrs map[string]string
 }
 
-// TODO complement methods for these Node types if needed
+// Attr returns the attribute value for the provided name if it exists.
+func (n EmptyXmlNode) Attr(name string) (string, bool) {
+	if n.Attrs == nil {
+		return "", false
+	}
+	value, ok := n.Attrs[name]
+	return value, ok
+}
+
+// HasAttr reports whether the given attribute is defined on the node.
+func (n EmptyXmlNode) HasAttr(name string) bool {
+	_, ok := n.Attrs[name]
+	return ok
+}
+
+// Attr returns the attribute value for the provided name if it exists.
+func (xn *XmlNode) Attr(name string) (string, bool) {
+	if xn == nil {
+		return "", false
+	}
+	for _, attr := range xn.Attrs {
+		if strings.EqualFold(attr.Name.Local, name) {
+			return attr.Value, true
+		}
+	}
+	return "", false
+}
+
+// FindNodes returns all descendants with the provided local name.
+func (xn *XmlNode) FindNodes(name string) []*XmlNode {
+	if xn == nil {
+		return nil
+	}
+	var result []*XmlNode
+	if strings.EqualFold(xn.XMLName.Local, name) {
+		result = append(result, xn)
+	}
+	for i := range xn.XmlNodes {
+		result = append(result, xn.XmlNodes[i].FindNodes(name)...)
+	}
+	return result
+}
 
 // ParseXML 解析 XML，返回 XmlNode 树 / ParseXML decodes the XML stream into a XmlNode tree.
 func ParseXML(r io.Reader) (*XmlNode, error) {

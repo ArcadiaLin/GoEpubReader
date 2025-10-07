@@ -14,7 +14,31 @@ const (
 	TextNode
 )
 
-// TODO complement methods for these Node types if needed
+// Attr returns the attribute value for the provided name if it exists.
+func (hn *HtmlNode) Attr(name string) (string, bool) {
+	if hn == nil || hn.Attrs == nil {
+		return "", false
+	}
+	value, ok := hn.Attrs[name]
+	return value, ok
+}
+
+// FindAll collects all descendant nodes whose element name matches the provided
+// name. The search is case sensitive in order to avoid unexpected matches when
+// working with XHTML documents.
+func (hn *HtmlNode) FindAll(name string) []*HtmlNode {
+	if hn == nil {
+		return nil
+	}
+	var result []*HtmlNode
+	if hn.Type == ElementNode && hn.Name == name {
+		result = append(result, hn)
+	}
+	for _, c := range hn.Children {
+		result = append(result, c.FindAll(name)...)
+	}
+	return result
+}
 
 // HtmlNode 是 HTML 版本的通用节点结构
 type HtmlNode struct {
@@ -37,6 +61,13 @@ func ParseHTML(r io.Reader) (*HtmlNode, error) {
 // convertHTMLNode 将 html.Node 转为 HtmlNode
 func convertHTMLNode(n *html.Node) *HtmlNode {
 	switch n.Type {
+	case html.DocumentNode, html.DoctypeNode:
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			if child := convertHTMLNode(c); child != nil {
+				return child
+			}
+		}
+		return nil
 	case html.ElementNode:
 		node := &HtmlNode{
 			Type:     ElementNode,
