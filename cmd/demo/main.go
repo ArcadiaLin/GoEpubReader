@@ -7,12 +7,12 @@ import (
 	"sort"
 	"strings"
 
-	"epub2/epub"
+	"github.com/ArcadiaLin/go-epub"
 )
 
 // This executable showcases a simple read-only workflow using the library.
 func main() {
-	example := filepath.Join("testEpubs", "testEpub1.epub")
+	example := filepath.Join("testEpubs", "testEpub2.epub")
 
 	book, err := epub.ReadBook(example)
 	if err != nil {
